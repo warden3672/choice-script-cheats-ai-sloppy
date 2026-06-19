@@ -1,13 +1,11 @@
-var myInterval;
+// Fixed cheats2.txt - no 'myInterval' conflict
 let btns = document.getElementById("buttons");
 let cheatButton = document.getElementById("cheatButton");
 let loadCheatButton = false;
 if (!cheatButton) {
-    // Cheats have not been loaded yet
     loadCheatButton = true;
 }
 else {
-    // Cheats have already been loaded
     delete url;
     delete baseURL;
     delete statCharts;
@@ -17,14 +15,14 @@ else {
     delete handleStatsChange;
     delete updateStats;
     delete loadCheats;
-    clearInterval(myInterval);
-    delete myInterval;
+    if (typeof myInterval !== 'undefined') {
+        clearInterval(myInterval);
+        delete myInterval;
+    }
 }
 
 let childWindow;
-// get the current URL
 let url = window.location.href;
-// strip off the index.html or mygame/ from the end of the URL
 let baseURL = url.replace(/(index\.html$|mygame\/$)/, '');
 
 console.log("Using Base Game URL: " + baseURL);
@@ -32,19 +30,15 @@ console.log("Using Base Game URL: " + baseURL);
 let sceneList = stats.scene.nav._sceneList;
 
 let statCharts = [];
-
 let sceneFiles = [];
-
 let stringValues = {};
 let stringConditions = [];
-
 let modifiableStatChartsStats = [];
 let modifiableNumericalStats = [];
 let modifiableBooleanStats = [];
 let modifiableStringStats = [];
 
 let scriptHtml = (function () {
-    // this will create the javscript that is used for updating values with stats in-game, passing values back and forth, and adding limits
     let opposedDrag = "function opposedDrag(event, valueId, opposedValueId) { var statBar = event.target; var dragStartX = 0; var dragStartValue = parseInt(statBar.style.width); var value = document.getElementById(valueId); if(parseInt(value.textContent) <= 0) {let fixValue = 1; statBar.style.width = fixValue + '%'; value.textContent = fixValue.toFixed(0); } if(parseInt(value.textContent) > 100) {let fixValue = 100; statBar.style.width = fixValue + '%'; value.textContent = fixValue.toFixed(0); } var opposedValue = document.getElementById(opposedValueId); function startDrag(event) { dragStartX = event.clientX; dragStartValue = parseInt(statBar.style.width); document.addEventListener('mousemove', doDrag); document.addEventListener('mouseup', stopDrag); } function doDrag(event) { var dragDistance = event.clientX - dragStartX; var newValue = dragStartValue + (dragDistance / statBar.parentNode.clientWidth) * 100; newValue = Math.min(100, Math.max(1, newValue)); statBar.style.width = newValue + '%'; value.textContent = newValue.toFixed(0); opposedValue.textContent = (100 - newValue).toFixed(0); } function stopDrag(event) { var newValue = parseInt(value.textContent); let oldValue = window.opener.stats[valueId]; window.opener.stats[valueId] = newValue; console.log('Old Value: ', oldValue, ', New Value: ', window.opener.stats[valueId]); document.removeEventListener('mousemove', doDrag); document.removeEventListener('mouseup', stopDrag); } startDrag(event); } ";
     let singleDrag = "function singleDrag(event, valueId) {var statBar = event.target;var dragStartX = 0;var dragStartValue = parseInt(statBar.style.width);var value = document.getElementById(valueId); if(parseInt(value.textContent) <= 0) {let fixValue = 1; statBar.style.width = fixValue + '%'; value.textContent = fixValue.toFixed(0); } if(parseInt(value.textContent) > 100) {let fixValue = 100; statBar.style.width = fixValue + '%'; value.textContent = fixValue.toFixed(0); } function startDrag(event) {dragStartX = event.clientX;dragStartValue = parseInt(statBar.style.width);document.addEventListener('mousemove', doDrag);document.addEventListener('mouseup', stopDrag);}function doDrag(event) {var dragDistance = event.clientX - dragStartX;var newValue = dragStartValue + (dragDistance / statBar.parentNode.clientWidth) * 100;newValue = Math.min(100, Math.max(1, newValue)); statBar.style.width = newValue + '%';value.textContent = newValue.toFixed(0);}function stopDrag(event) {var newValue = parseInt(value.textContent); let oldValue = window.opener.stats[valueId]; window.opener.stats[valueId] = newValue; console.log('Old Value: ', oldValue, ', New Value: ', window.opener.stats[valueId]); document.removeEventListener('mousemove', doDrag);document.removeEventListener('mouseup', stopDrag);}startDrag(event);} ";
     let updateStat = "function updateStat(valueId) { var value = document.getElementById(valueId); console.log(value); var inputValue = value.textContent.trim(); var inputType = value.getAttribute('data-type'); var errorValue = document.getElementById(valueId + 'Error'); var selection = window.getSelection(); var range = selection.getRangeAt(0); var start = range.startOffset; if (inputType == 'number') { inputValue = parseInt(inputValue); if (!isNaN(inputValue)) { value.textContent = Math.round(inputValue).toString(); errorValue.style.display = 'none'; } else { value.textContent = ''; errorValue.textContent = 'Please enter a valid number'; errorValue.style.display = 'inline-block'; } } else if (inputType == 'boolean') { value.textContent = inputValue; inputValue = inputValue.toLowerCase().trim(); if (inputValue == 'true' || inputValue == 'false') { errorValue.style.display = 'none'; } else { errorValue.textContent = 'Please enter true or false'; errorValue.style.display = 'inline-block'; } } else { value.textContent = inputValue; inputValue = inputValue.trim(); errorValue.style.display = 'none'; } let oldValue = window.opener.stats[valueId]; window.opener.stats[valueId] = inputValue; console.log('Old Value: ', oldValue, ', New Value: ', window.opener.stats[valueId]); range.setStart(value.firstChild, start); selection.removeAllRanges(); selection.addRange(range); } ";
@@ -287,8 +281,6 @@ async function GenerateStringHtml() {
         let value = modifiableStringStats[index].value;
         let title = getTitle(key);
 
-
-        // look for variable in stringConditions to determine if it shouldn't be modified
         let stringCondition = stringConditions.find(x => x == key);
         if (stringCondition != undefined) {
             conditional = true;
@@ -365,25 +357,21 @@ async function GenerateHtml() {
 function removeBold(line) {
     line = line.replace(/\[b\]/g, '').replace(/\[\/b\]/g, '');
     line = line.trim();
-
     return line;
 }
 function removeItalic(line) {
     line = line.replace(/\[i\]/g, '').replace(/\[\/i\]/g, '');
     line = line.trim();
-
     return line;
 }
 function removeBoldItalic(line) {
     line = line.replace(/\[b\]/g, '').replace(/\[\/b\]/g, '').replace(/\[i\]/g, '').replace(/\[\/i\]/g, '');
     line = line.trim();
-
     return line;
 }
 
 let statIndex = 0;
 function ParseStatChart(rawStatChart) {
-    // Parse the stat chart
     let stat = {};
 
     for (let i = 0; i < rawStatChart.length; i++) {
@@ -448,34 +436,22 @@ function ParseStatChart(rawStatChart) {
 }
 
 function ParseFileText(text) {
-    // Split the scene file content into lines
     let lines = text.split(/\r?\n/);
-
     let currentLine = 0;
-    // Read the scene file line by line
     while (currentLine < lines.length) {
         let line = lines[currentLine];
-        // Check if *stat_chart by chomping off whitespace from the beginning of the line
         if (line.trim().startsWith('*stat_chart')) {
-            // if we found a *stat_chart then we can start parsing the stat chart
             let rawStatChart = [];
-            // we need to keep track of the indentation level of the first line (the *stat_chart line)
             let firstIndent = line.search(/\S|$/);
-            // then we move to the next line
             currentLine++;
             while (currentLine < lines.length) {
-                // update the line
                 line = lines[currentLine];
-                // If the line is blank or a *comment, skip it
                 let skippable = line.trim().length == 0 || line.trim().startsWith('*comment');
                 if (skippable) {
                     currentLine++;
                 }
                 else {
-                    // get the current indentation level
                     let currentIndent = line.search(/\S|$/);
-
-                    // If the next line is indented more than the first line, add it to the rawStatChart
                     if (currentIndent > firstIndent) {
                         rawStatChart.push(line);
                         currentLine++;
@@ -494,18 +470,13 @@ function ParseFileText(text) {
             if (line.includes('[i]') || line.endsWith('[/i]')) {
                 line = removeItalic(line);
             }
-
             if (line.endsWith('}') && line.includes('$', '{')) {
                 let type = 'text';
-                // check the number of variables in the line
                 let openBrackets = line.split('{').length - 1;
                 let closeBrackets = line.split('}').length - 1;
-
                 let numVariables = Math.min(openBrackets, closeBrackets);
-
                 if (numVariables > 1) {
                     let lines = [];
-                    // if there is more than one variable, the labels will just be the variable name with the first letter capitalized
                     let variables = line.match(/\{\w+}/g);
                     variables.forEach((variable) => {
                         variable = variable.replace('{', '').replace('}', '');
@@ -524,9 +495,7 @@ function ParseFileText(text) {
                     }
                     let variable = line.substring(line.indexOf('{') + 1, line.indexOf('}')).toLowerCase();
                     let label = line.substring(0, line.indexOf('$')).trim().replace(/\W+$/, '');
-
                     line = type + ' ' + variable + ' ' + label;
-
                     ParseStatChart([line]);
                 }
             }
@@ -539,11 +508,8 @@ function ParseFileText(text) {
 }
 
 let chartPromise = new Promise(function (resolve) {
-    // Load the scene file content by appending the scene file name to the base URL
     let statsURL = baseURL + "mygame/scenes/choicescript_stats.txt";
-
     console.log(`Loading choicescript_stats.txt...`);
-
     fetch(statsURL)
         .then(response => {
             if (!response.ok) {
@@ -557,21 +523,16 @@ let chartPromise = new Promise(function (resolve) {
         .catch(error => {
             console.error("Error:", error);
         });
-
     console.log(`*** choicescript_stats.txt Loaded ***`);
-
     resolve(statCharts);
 });
 
 let sceneFilePromise = new Promise(function (resolve) {
     console.log(`Loading Scene Files...`);
-
     sceneFiles = sceneList.map(function (sceneName) {
         return sceneName + ".txt";
     });
-
     console.log(`*** Scene Files Loaded ***`);
-
     resolve(sceneFiles);
 });
 
@@ -579,13 +540,10 @@ function addStringOption(line) {
     let lineElements = line.trim().split(" ");
     if (lineElements.length >= 3 && lineElements[2].startsWith('"')) {
         try {
-            // Extract the name of the string
             let name = lineElements[1].toLowerCase();
-            // Extract the value of the string
             let value = line.split('"')[1];
             stringValues[name] = stringValues[name] || [];
             if (!stringValues[name].includes(value)) {
-                // Add the value to the stringValues object
                 stringValues[name].push(value);
             }
         }
@@ -628,17 +586,14 @@ function lineConditional(line) {
 function extractConditionalStatements(line) {
     let regexMatcher = /\((.+?)\)/g;
     let matches = line.match(regexMatcher);
-
     if (matches) {
         for (let i = 0; i < matches.length; i++) {
-            let innerText = matches[i].substring(1, matches[i].length - 1); // Remove outer parentheses
-            extractConditionalStatements(innerText); // Recursively process inner text
+            let innerText = matches[i].substring(1, matches[i].length - 1);
+            extractConditionalStatements(innerText);
         }
     }
     else {
-        // No more nested parentheses
         line = line.replace(/\(|\)/g, '');
-        // Determine if = or != is used. If so, split the line on that character
         let splitChar = '';
         if (line.includes('!=')) {
             splitChar = '!=';
@@ -650,7 +605,6 @@ function extractConditionalStatements(line) {
             let splitLine = line.split(splitChar);
             let variable = splitLine[0].trim().toLowerCase();
             if (stringValues[variable]) {
-                // Don't add a duplicate
                 if (!stringConditions.includes(variable)) {
                     stringConditions.push(variable);
                 }
@@ -661,15 +615,10 @@ function extractConditionalStatements(line) {
 
 function getstringOptions() {
     console.log(`Loading String Options...`);
-
     let promises = [];
-
-    // Iterate through each scene file
     for (let i = 0; i < sceneFiles.length; i++) {
         let sceneFile = sceneFiles[i];
-        // Load the scene file content
         let sceneURL = baseURL + "mygame/scenes/" + sceneFile;
-
         let promise = fetch(sceneURL).then(response => {
             if (!response.ok) {
                 throw new Error("Network response was not ok");
@@ -677,24 +626,18 @@ function getstringOptions() {
             return response.text();
         }).then(text => {
             console.log(`   Loading ${sceneFile}...`);
-            // Split the scene file content into lines
             let sceneLines = text.split("\n");
-            // Throw an error if the scene file has less than 3 lines
             if (sceneLines.length < 3) {
                 throw new Error("Scene file has less than 3 lines");
             }
-            // Iterate through each line of the scene file
             for (let j = 0; j < sceneLines.length; j++) {
                 try {
                     let line = sceneLines[j].trim();
                     if (lineExists(line)) {
-                        // Check if the line starts with *create or *temp or *set
                         if (lineAssignable(line)) {
                             addStringOption(line)
                         }
-                        // Check if a string stat is being used as a condition, and if so, add it to the conditionStrings array
                         if (lineConditional(line)) {
-                            // Remove the conditional keywords
                             line = line.replace(/\*if|\*elseif|\*elsif|\*selectable_if/g, '');
                             extractConditionalStatements(line);
                         }
@@ -707,347 +650,4 @@ function getstringOptions() {
         }).then(() => {
             console.log(`   *** ${sceneFile} Loaded ***`);
         }).catch(error => {
-            console.log(`   Error: ${error} when loading ${sceneFile}`);
-        });
-        promises.push(promise);
-    }
-
-    Promise.all(promises)
-        .then(() => {
-            console.log(`*** String Options Loaded ***`);
-        })
-        .catch(error => {
-            console.log(`Error: ${error}`);
-        });
-}
-
-let stringOptionsPromise = new Promise(async function (resolve) {
-    await sceneFilePromise;
-    getstringOptions();
-
-    resolve();
-});
-
-// Create a Proxy object to listen for changes to the stats object
-let statsProxy = new Proxy(stats, {
-    set: function (target, property, value) {
-        target[property] = value;
-        handleStatsChange();
-        return true;
-    },
-});
-
-// Replace the original stats object with the Proxy object
-stats = statsProxy;
-
-// Define the callback function to call when a change occurs
-function handleStatsChange() {
-    updateStats();
-}
-
-function compileStatCharts() {
-    return new Promise((resolve, reject) => {
-
-        try {
-            let statKeyValues = Object.entries(stats);
-            // Clear the modifiableStatChartsStats array
-            modifiableStatChartsStats = [];
-            for (const [key, value] of statKeyValues) {
-                let stat = statCharts.find(stat => stat.variable == key);
-                if (stat !== undefined) {
-                    try {
-                        let regexMatcher = /\$\{(.+?)\}/;
-                        let match = regexMatcher.exec(stat.label);
-                        let x = match ? match[1] : null;
-                        let regex = new RegExp(`\\$\\{\\s*(${x})\\s*\\}`, 'g'); // match `${key}` syntax and capture the variable name
-                        stat.label = stat.label.replace(regex, (_, x) => {
-                            let variableValue = statKeyValues.find(([k, v]) => k == x)?.[1];
-                            if (variableValue == undefined) {
-                                return ''; // replace with an empty string
-                            } else {
-                                return variableValue; // replace with the value from the stats object
-                            }
-                        }).trim();
-                        let hasLetters = /[a-zA-Z]/.test(value);
-                        if (typeof value == "boolean") {
-                            let val = value;
-                            if (stat.type == "opposed_pair") {
-                                let opposedKey = stat.opposed_label.toLowerCase();
-                                modifiableStatChartsStats.push({ index: stat.statIndex, key: key, opposedKey: opposedKey, value: val, statType: "boolean", displayType: stat.type, label: stat.label, opposedLabel: stat.opposed_label });
-                            }
-                            else {
-                                modifiableStatChartsStats.push({ index: stat.statIndex, key: key, value: val, statType: "boolean", displayType: stat.type, label: stat.label });
-                            }
-                        }
-                        else if ((Number.isNaN(value) == false && value != null && typeof value != "undefined" && hasLetters == false && value != "") || Number.isInteger(value) == true) {
-                            let val = parseInt(value);
-                            if (stat.type == "opposed_pair") {
-                                let opposedKey = stat.opposed_label.toLowerCase();
-                                modifiableStatChartsStats.push({ index: stat.statIndex, key: key, opposedKey: opposedKey, value: val, statType: "number", displayType: stat.type, label: stat.label, opposedLabel: stat.opposed_label });
-                            }
-                            else {
-                                modifiableStatChartsStats.push({ index: stat.statIndex, key: key, value: val, statType: "number", displayType: stat.type, label: stat.label });
-                            }
-                        }
-                        else {
-                            let val = value;
-                            if (typeof val == "string") {
-                                if (stat.type == "opposed_pair") {
-                                    let opposedKey = stat.opposed_label.toLowerCase();
-                                    modifiableStatChartsStats.push({ index: stat.statIndex, key: key, opposedKey: opposedKey, value: val, statType: "string", displayType: stat.type, label: stat.label, opposedLabel: stat.opposed_label });
-                                }
-                                else {
-                                    modifiableStatChartsStats.push({ index: stat.statIndex, key: key, value: val, statType: "string", displayType: stat.type, label: stat.label });
-                                }
-                            }
-                        }
-                    } catch (err) {
-                        console.log(`Error (${err}) -> ${key}: ${value}`);
-                    }
-                }
-            }
-            modifiableStatChartsStats = Object.values(modifiableStatChartsStats).sort((a, b) => a.index - b.index);
-            resolve();
-        }
-        catch (error) {
-            console.log(error);
-            reject(error);
-        }
-
-    });
-}
-
-function compileAllStats() {
-    return new Promise((resolve, reject) => {
-
-        try {
-            modifiableBooleanStats = [];
-            modifiableNumericalStats = [];
-            modifiableStringStats = [];
-
-            for (const [key, value] of Object.entries(stats)) {
-                try {
-                    let hasLetters = /[a-zA-Z]/.test(value);
-                    if (typeof value == "boolean") {
-                        // variable is a boolean
-                        let val = value;
-                        modifiableBooleanStats.push({ key: key, value: val, displayType: "boolean" });
-                    }
-                    else if ((Number.isNaN(value) == false && value != null && typeof value != "undefined" && hasLetters == false && value != "") || Number.isInteger(value) == true) {
-                        // print each check to see why it's passing as a number
-
-                        let val = parseInt(value);
-                        // variable is a number
-                        modifiableNumericalStats.push({ key: key, value: val, displayType: "number" });
-                    }
-                    else {
-                        let val = value;
-                        if (typeof val == "string") {
-                            // variable is a string
-                            if (typeof stringValues[key] != "undefined" && stringValues[key].length > 1) {
-                                modifiableStringStats.push({ key: key, value: val, displayType: "string" });
-                            }
-                        }
-                    }
-                }
-                catch (err) {
-                    console.log(`Error (${err}) -> ${key}: ${value}`);
-                }
-            }
-            resolve();
-        }
-        catch (error) {
-            console.log(error);
-            reject(error);
-        }
-
-    });
-}
-
-async function complileHtml() {
-    await GenerateHtml();
-
-    if (loadCheatButton) {
-        btns.innerHTML = btns.innerHTML + "<button id='cheatButton' class='spacedLink' onclick='loadCheats()'>Modify Stats</button>";
-        loadCheatButton = false;
-    }
-
-    return Promise.resolve();
-}
-
-// Function to update the modifiableStatChartsStats and statModifiers arrays
-async function updateStats() {
-    await chartPromise;
-    await stringOptionsPromise;
-    await compileStatCharts();
-    await compileAllStats();
-    await complileHtml();
-}
-
-function OpenCheatWindow() {
-    // open a new pop up window to put all the stats and give it a title
-    childWindow = window.open('', '47288', 'width=1280,height=720,toolbar=0,menubar=0,location=0,status=0,scrollbars=0,resizeable=0,left=0,top=0');
-    childWindow.document.title = 'ChoiceScript Editor';
-
-    // attach script to windows
-    let scriptTag = childWindow.document.createElement('script');
-
-    let inlineScript = childWindow.document.createTextNode(scriptHtml);
-    scriptTag.appendChild(inlineScript);
-    childWindow.document.body.appendChild(scriptTag);
-
-    let wrapperDiv = childWindow.document.createElement('div');
-    childWindow.document.body.appendChild(wrapperDiv);
-
-    wrapperDiv.innerHTML = CheatPageHtml;
-}
-
-async function loadCheats() {
-    // Call updateStats once at the start to initialize the arrays
-    // Show loading indicator (e.g., spinning cursor)
-    document.body.style.cursor = "wait";
-
-    console.log(`Loading Cheats...`);
-
-    try {
-        // Call updateStats to initialize the arrays
-        await updateStats();
-        // Open the cheat window after stats are updated
-        OpenCheatWindow();
-    }
-    catch (error) {
-        console.error("Error: ", error);
-    }
-    finally {
-        // Hide loading indicator
-        document.body.style.cursor = "auto";
-    }
-
-    console.log(`*** Cheats Loaded ***`);
-}
-
-// every 2.5 seconds, update the existing table with the values found in the game stats. 
-// Sometimes the game will reset the stats, so this ensures the player always sees the latest values
-let myInterval = setInterval(async function () {
-    // only run if the child window is open
-    if (childWindow && !childWindow.closed) {
-        try {
-            await chartPromise;
-            await stringOptionsPromise;
-            await compileStatCharts();
-            await compileAllStats();
-            await complileHtml();
-
-            for (let index = 0; index < modifiableStatChartsStats.length; index++) {
-                let key = modifiableStatChartsStats[index].key;
-                let value = modifiableStatChartsStats[index].value;
-                let displayType = modifiableStatChartsStats[index].displayType;
-
-                try {
-                    if (displayType == "opposed_pair") {
-                        let opposedKey = modifiableStatChartsStats[index].opposedKey;
-                        childWindow.document.getElementById(key).textContent = parseInt(value);
-                        childWindow.document.getElementById(opposedKey).textContent = (100 - parseInt(value));
-                    }
-                    if (displayType == "percent") {
-                        childWindow.document.getElementById(key).textContent = parseInt(value);
-                    }
-                    if (displayType == "text") {
-                        childWindow.document.getElementById(key).textContent = value;
-                    }
-                }
-                catch (error) {
-                    if (error instanceof ReferenceError) {
-                        // Error: childWindow is not defined
-                    }
-                    else {
-                        console.log(`Error with StatChartsStats: ${modifiableStatChartsStats} -> ${error}`);
-                    }
-                }
-            }
-
-            for (let index = 0; index < modifiableBooleanStats.length; index++) {
-                let key = modifiableBooleanStats[index].key;
-                let value = modifiableBooleanStats[index].value;
-
-                try {
-                    childWindow.document.getElementById(key).value = value;
-                    childWindow.document.getElementById(key).checked = value;
-                }
-                catch (error) {
-                    if (error instanceof ReferenceError) {
-                        // Error: childWindow is not defined
-                    }
-                    else {
-                        console.log(`Error with BooleanStats: ${modifiableBooleanStats} -> ${error}`);
-                    }
-                }
-            }
-            for (let index = 0; index < modifiableNumericalStats.length; index++) {
-                let key = modifiableNumericalStats[index].key;
-                let value = modifiableNumericalStats[index].value;
-
-                try {
-                    childWindow.document.getElementById(key).textContent = value;
-                }
-                catch (error) {
-                    if (error instanceof ReferenceError) {
-                        // Error: childWindow is not defined
-                    }
-                    else {
-                        console.log(`Error with NumericalStats: ${modifiableNumericalStats} -> ${error}`);
-                    }
-                }
-            }
-            for (let index = 0; index < modifiableStringStats.length; index++) {
-                let key = modifiableStringStats[index].key;
-                let value = modifiableStringStats[index].value;
-
-                try {
-                    // two string inputs to update: key-input and key-select
-                    childWindow.document.getElementById(key + "-input").value = value;
-                    childWindow.document.getElementById(key + "-input").textContent = value;
-                    childWindow.document.getElementById(key + "-select").value = value;
-
-                    let selectElement = childWindow.document.getElementById(key + "-select");
-                    let val = selectElement.value;
-                    let options = selectElement.options;
-
-                    try {
-                        if (typeof options != "undefined") {
-                            for (let i = 0; i < options.length; i++) {
-                                let option = options[i];
-
-                                if (option.value != val) {
-                                    option.removeAttribute("selected");
-                                }
-                                else {
-                                    option.setAttribute("selected", "");
-                                }
-                            }
-                        }
-                    }
-                    catch (error) {
-                        console.log(`Error with StringOptions: ${options} -> ${error}`);
-                    }
-                }
-                catch (error) {
-                    if (error instanceof ReferenceError) {
-                        // Error: childWindow is not defined
-                    }
-                    else {
-                        console.log(`Error with StringStats: ${modifiableStringStats} -> ${error}`);
-                    }
-                }
-            }
-        }
-        catch (error) {
-            console.log(error);
-        }
-    }
-    else {
-        if (loadCheatButton) {
-            await updateStats();
-        }
-    }
-}, 3000);
+           
