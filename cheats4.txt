@@ -4,9 +4,10 @@
     console.log('Cheat Script v4: Starting...');
     
     // ============================================================
-    // PART 1: MAIN CHEAT ENGINE
+    // PART 1: MAIN CHEAT ENGINE (Persistent)
     // ============================================================
     
+    // Create the engine if it doesn't exist
     if (typeof window.__cheatEngine === 'undefined') {
         window.__cheatEngine = {
             initialized: false,
@@ -15,8 +16,8 @@
             childWindow: null,
             updateInterval: null,
             isOpen: false,
-            // NEW: Flag to pause refresh while typing
-            isTyping: false
+            isTyping: false,
+            loaded: false
         };
     }
     
@@ -41,6 +42,7 @@
     }
     
     function addCheatButton() {
+        // Check if button already exists
         if (document.getElementById('cheatButton')) {
             return;
         }
@@ -58,9 +60,11 @@
         cheatButton.onclick = function(e) {
             e.preventDefault();
             e.stopPropagation();
+            console.log('Cheat Script v4: Button clicked, opening window...');
             openCheatWindow();
         };
         
+        // Insert at the beginning
         if (btns.firstChild) {
             btns.insertBefore(cheatButton, btns.firstChild);
         } else {
@@ -195,6 +199,7 @@
             string: []
         };
         
+        // Compile stat charts
         for (var i = 0; i < engine.statCharts.length; i++) {
             var stat = engine.statCharts[i];
             var value = stats[stat.variable];
@@ -212,6 +217,7 @@
             }
         }
         
+        // Compile all other stats
         for (var key in stats) {
             var value = stats[key];
             if (value === undefined || value === null) continue;
@@ -261,6 +267,7 @@
         html += '<h1 style="text-align:center;margin-top:0;">Modify Stats</h1>';
         html += '<div id="updateNotice" class="update-notice">Stats updated in game!</div>';
         
+        // Tab buttons
         html += '<div style="text-align:center;margin:10px 0;">';
         html += '<button class="tabButton active" onclick="cheatShowTab(0)">Stat Charts</button>';
         html += '<button class="tabButton" onclick="cheatShowTab(1)">Numerical</button>';
@@ -301,7 +308,6 @@
                     html += '<div class="statValue" id="bar_' + key + '" style="width:' + percentValue + '%;" onmousedown="cheatDragSingle(event, \'' + key + '\')">&nbsp;</div>';
                     html += '</div>';
                 } else {
-                    // NEW: Added onfocus and onblur for typing detection
                     html += '<div style="padding:3px 0;">';
                     html += '<span>' + label + ': </span>';
                     html += '<span id="val_' + key + '" contenteditable="true" class="editable" onfocus="cheatTypingStart()" onblur="cheatUpdateTextStat(\'' + key + '\')">' + value + '</span>';
@@ -324,7 +330,6 @@
                 var stat = numerical[j];
                 html += '<tr>';
                 html += '<td>' + stat.key.replace(/_/g, ' ') + '</td>';
-                // NEW: Added onfocus and onblur for typing detection
                 html += '<td><span id="val_' + stat.key + '" contenteditable="true" class="editable" onfocus="cheatTypingStart()" onblur="cheatUpdateNumberStat(\'' + stat.key + '\')">' + stat.value + '</span></td>';
                 html += '</tr>';
             }
@@ -366,7 +371,6 @@
                 var stat = string[l];
                 html += '<tr>';
                 html += '<td>' + stat.key.replace(/_/g, ' ') + '</td>';
-                // NEW: Added onfocus and onblur for typing detection
                 html += '<td><input type="text" id="val_' + stat.key + '" value="' + stat.value + '" onfocus="cheatTypingStart()" onchange="cheatSetString(\'' + stat.key + '\')" style="width:200px;"></td>';
                 html += '</tr>';
             }
@@ -381,26 +385,30 @@
     }
     
     // ============================================================
-    // PART 6: OPEN CHEAT WINDOW
+    // PART 6: OPEN CHEAT WINDOW (EXPOSED GLOBALLY)
     // ============================================================
     
     function openCheatWindow() {
         console.log('Cheat Script v4: Opening cheat window...');
         
+        // If window already open, focus it
         if (engine.childWindow && !engine.childWindow.closed) {
             engine.childWindow.focus();
             refreshWindowStats(engine.childWindow);
             return;
         }
         
+        // Compile stats
         var statsData = compileStats();
         if (!statsData) {
             alert('Could not read game stats. Make sure you\'re on a game page.');
             return;
         }
         
+        // Build HTML
         var html = buildCheatHTML(statsData);
         
+        // Open window
         var childWindow = window.open('', 'cheatWindow', 'width=1000,height=750,toolbar=0,menubar=0,location=0,status=0,scrollbars=1,resizable=1');
         if (!childWindow) {
             alert('Please allow popups for this site to use the cheat tool.');
@@ -413,10 +421,11 @@
         childWindow.document.title = 'ChoiceScript Cheat Editor';
         childWindow.document.body.innerHTML = html;
         
+        // Store reference to parent window
         childWindow.parentEngine = engine;
         childWindow.parentStats = window.stats;
         
-        // NEW: Typing detection functions
+        // Define functions in the child window
         childWindow.cheatTypingStart = function() {
             engine.isTyping = true;
         };
@@ -445,7 +454,6 @@
                 showUpdateNotice(childWindow);
                 console.log('Cheat Script v4: Updated', key, 'to', val);
             }
-            // NEW: Reset typing flag
             engine.isTyping = false;
         };
         
@@ -456,7 +464,6 @@
             window.stats[key] = val;
             showUpdateNotice(childWindow);
             console.log('Cheat Script v4: Updated', key, 'to', val);
-            // NEW: Reset typing flag
             engine.isTyping = false;
         };
         
@@ -474,7 +481,6 @@
             window.stats[key] = input.value;
             showUpdateNotice(childWindow);
             console.log('Cheat Script v4: Set', key, 'to', input.value);
-            // NEW: Reset typing flag
             engine.isTyping = false;
         };
         
@@ -576,13 +582,14 @@
             }
         }
         
+        // Show first tab
         childWindow.cheatShowTab(0);
         
+        // Set up auto-refresh interval
         if (engine.updateInterval) {
             clearInterval(engine.updateInterval);
         }
         engine.updateInterval = setInterval(function() {
-            // NEW: Check if typing before refreshing
             if (engine.isTyping) {
                 return;
             }
@@ -604,11 +611,7 @@
     
     function refreshWindowStats(childWindow) {
         if (!childWindow || childWindow.closed) return;
-        
-        // NEW: Don't refresh if typing
-        if (engine.isTyping) {
-            return;
-        }
+        if (engine.isTyping) return;
         
         var statsData = compileStats();
         if (!statsData) return;
@@ -678,6 +681,12 @@
             console.log('Cheat Script v4: Stat charts loaded');
             addCheatButton();
             console.log('Cheat Script v4: Ready');
+            
+            // ADDED: Store reference to openCheatWindow in both places
+            window.openCheatWindow = openCheatWindow;
+            engine.openCheatWindow = openCheatWindow;
+            
+            console.log('Cheat Script v4: openCheatWindow exposed globally');
         }).catch(function(error) {
             console.error('Cheat Script v4: Initialization error:', error);
             addCheatButton();
@@ -690,8 +699,9 @@
         init();
     }
     
-    // Expose openCheatWindow globally
+    // ALSO ADDED: Expose immediately as well (in case it's called before init finishes)
     window.openCheatWindow = openCheatWindow;
+    engine.openCheatWindow = openCheatWindow;
     
     console.log('Cheat Script v4: Loaded successfully');
 })();
