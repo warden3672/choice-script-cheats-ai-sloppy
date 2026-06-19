@@ -3,43 +3,32 @@
     
     console.log('Cheat Script v4: Starting...');
     
-    // Prevent duplicate loading
-    if (window._cheatScriptLoaded) {
-        console.log('Cheat Script v4: Already loaded, re-initializing...');
-        // Don't return, re-initialize
-    }
-    window._cheatScriptLoaded = true;
-    
     // ============================================================
     // PART 1: MAIN CHEAT ENGINE
     // ============================================================
     
-    // Main cheat object that persists
-    window.CheatEngine = window.CheatEngine || {
-        initialized: false,
-        statCharts: [],
-        modifiableStats: {
-            charts: [],
-            numerical: [],
-            boolean: [],
-            string: []
-        },
-        childWindow: null,
-        updateInterval: null,
-        isOpen: false
-    };
+    if (typeof window.__cheatEngine === 'undefined') {
+        window.__cheatEngine = {
+            initialized: false,
+            statCharts: [],
+            modifiableStats: null,
+            childWindow: null,
+            updateInterval: null,
+            isOpen: false,
+            // NEW: Flag to pause refresh while typing
+            isTyping: false
+        };
+    }
     
-    var engine = window.CheatEngine;
+    var engine = window.__cheatEngine;
     
     // ============================================================
     // PART 2: GET BUTTONS AND ADD CHEAT BUTTON
     // ============================================================
     
     function getButtonsContainer() {
-        // Try multiple ways to find the buttons container
         var btns = document.getElementById('buttons');
         if (!btns) {
-            // Try to find any container that might have the buttons
             var possibleContainers = document.querySelectorAll('#buttons, .buttons, [class*="buttons"], #menuButtons');
             for (var i = 0; i < possibleContainers.length; i++) {
                 if (possibleContainers[i].children.length > 0) {
@@ -52,31 +41,32 @@
     }
     
     function addCheatButton() {
-        var btns = getButtonsContainer();
-        if (!btns) {
-            console.error('Cheat Script v4: Could not find buttons container');
-            // Try again in 1 second
-            setTimeout(addCheatButton, 1000);
+        if (document.getElementById('cheatButton')) {
             return;
         }
         
-        // Remove old cheat button if exists
-        var oldButton = document.getElementById('cheatButton');
-        if (oldButton) {
-            oldButton.remove();
+        var btns = getButtonsContainer();
+        if (!btns) {
+            setTimeout(addCheatButton, 500);
+            return;
         }
         
-        // Create the cheat button
         var cheatButton = document.createElement('button');
         cheatButton.id = 'cheatButton';
         cheatButton.className = 'spacedLink';
         cheatButton.textContent = 'Modify Stats';
         cheatButton.onclick = function(e) {
             e.preventDefault();
+            e.stopPropagation();
             openCheatWindow();
         };
-        btns.appendChild(cheatButton);
-        console.log('Cheat Script v4: Cheat button added');
+        
+        if (btns.firstChild) {
+            btns.insertBefore(cheatButton, btns.firstChild);
+        } else {
+            btns.appendChild(cheatButton);
+        }
+        console.log('Cheat Script v4: Button added');
     }
     
     // ============================================================
@@ -92,8 +82,6 @@
         return new Promise(function(resolve) {
             var baseURL = getBaseURL();
             var statsURL = baseURL + 'mygame/scenes/choicescript_stats.txt';
-            
-            console.log('Cheat Script v4: Loading stat charts from:', statsURL);
             
             fetch(statsURL)
                 .then(function(response) {
@@ -207,7 +195,6 @@
             string: []
         };
         
-        // Compile stat charts
         for (var i = 0; i < engine.statCharts.length; i++) {
             var stat = engine.statCharts[i];
             var value = stats[stat.variable];
@@ -225,7 +212,6 @@
             }
         }
         
-        // Compile all other stats
         for (var key in stats) {
             var value = stats[key];
             if (value === undefined || value === null) continue;
@@ -251,7 +237,6 @@
     function buildCheatHTML(statsData) {
         var html = '';
         
-        // Styles
         html += '<style>';
         html += 'body {font-family: Palatino,Georgia,serif;background: #f7f4f1;color: #222;margin: 20px;padding: 0;}';
         html += '.statBar {background: #949291;height: 2rem;line-height: 2rem;margin: 5px 0;width: 100%;color: #fff;position: relative;cursor: pointer;}';
@@ -276,7 +261,6 @@
         html += '<h1 style="text-align:center;margin-top:0;">Modify Stats</h1>';
         html += '<div id="updateNotice" class="update-notice">Stats updated in game!</div>';
         
-        // Tab buttons
         html += '<div style="text-align:center;margin:10px 0;">';
         html += '<button class="tabButton active" onclick="cheatShowTab(0)">Stat Charts</button>';
         html += '<button class="tabButton" onclick="cheatShowTab(1)">Numerical</button>';
@@ -317,9 +301,10 @@
                     html += '<div class="statValue" id="bar_' + key + '" style="width:' + percentValue + '%;" onmousedown="cheatDragSingle(event, \'' + key + '\')">&nbsp;</div>';
                     html += '</div>';
                 } else {
+                    // NEW: Added onfocus and onblur for typing detection
                     html += '<div style="padding:3px 0;">';
                     html += '<span>' + label + ': </span>';
-                    html += '<span id="val_' + key + '" contenteditable="true" class="editable" onblur="cheatUpdateTextStat(\'' + key + '\')">' + value + '</span>';
+                    html += '<span id="val_' + key + '" contenteditable="true" class="editable" onfocus="cheatTypingStart()" onblur="cheatUpdateTextStat(\'' + key + '\')">' + value + '</span>';
                     html += '</div>';
                 }
             }
@@ -339,7 +324,8 @@
                 var stat = numerical[j];
                 html += '<tr>';
                 html += '<td>' + stat.key.replace(/_/g, ' ') + '</td>';
-                html += '<td><span id="val_' + stat.key + '" contenteditable="true" class="editable" onblur="cheatUpdateNumberStat(\'' + stat.key + '\')">' + stat.value + '</span></td>';
+                // NEW: Added onfocus and onblur for typing detection
+                html += '<td><span id="val_' + stat.key + '" contenteditable="true" class="editable" onfocus="cheatTypingStart()" onblur="cheatUpdateNumberStat(\'' + stat.key + '\')">' + stat.value + '</span></td>';
                 html += '</tr>';
             }
             html += '</table>';
@@ -380,7 +366,8 @@
                 var stat = string[l];
                 html += '<tr>';
                 html += '<td>' + stat.key.replace(/_/g, ' ') + '</td>';
-                html += '<td><input type="text" id="val_' + stat.key + '" value="' + stat.value + '" onchange="cheatSetString(\'' + stat.key + '\')" style="width:200px;"></td>';
+                // NEW: Added onfocus and onblur for typing detection
+                html += '<td><input type="text" id="val_' + stat.key + '" value="' + stat.value + '" onfocus="cheatTypingStart()" onchange="cheatSetString(\'' + stat.key + '\')" style="width:200px;"></td>';
                 html += '</tr>';
             }
             html += '</table>';
@@ -400,25 +387,20 @@
     function openCheatWindow() {
         console.log('Cheat Script v4: Opening cheat window...');
         
-        // If window already open, focus it
         if (engine.childWindow && !engine.childWindow.closed) {
             engine.childWindow.focus();
-            // Refresh the stats
             refreshWindowStats(engine.childWindow);
             return;
         }
         
-        // Compile stats
         var statsData = compileStats();
         if (!statsData) {
             alert('Could not read game stats. Make sure you\'re on a game page.');
             return;
         }
         
-        // Build HTML
         var html = buildCheatHTML(statsData);
         
-        // Open window
         var childWindow = window.open('', 'cheatWindow', 'width=1000,height=750,toolbar=0,menubar=0,location=0,status=0,scrollbars=1,resizable=1');
         if (!childWindow) {
             alert('Please allow popups for this site to use the cheat tool.');
@@ -431,11 +413,18 @@
         childWindow.document.title = 'ChoiceScript Cheat Editor';
         childWindow.document.body.innerHTML = html;
         
-        // Store reference to parent window
         childWindow.parentEngine = engine;
         childWindow.parentStats = window.stats;
         
-        // Define functions in the child window
+        // NEW: Typing detection functions
+        childWindow.cheatTypingStart = function() {
+            engine.isTyping = true;
+        };
+        
+        childWindow.cheatTypingEnd = function() {
+            engine.isTyping = false;
+        };
+        
         childWindow.cheatShowTab = function(index) {
             var tabs = childWindow.document.querySelectorAll('.tabContent');
             var buttons = childWindow.document.querySelectorAll('.tabButton');
@@ -456,6 +445,8 @@
                 showUpdateNotice(childWindow);
                 console.log('Cheat Script v4: Updated', key, 'to', val);
             }
+            // NEW: Reset typing flag
+            engine.isTyping = false;
         };
         
         childWindow.cheatUpdateTextStat = function(key) {
@@ -465,6 +456,8 @@
             window.stats[key] = val;
             showUpdateNotice(childWindow);
             console.log('Cheat Script v4: Updated', key, 'to', val);
+            // NEW: Reset typing flag
+            engine.isTyping = false;
         };
         
         childWindow.cheatSetBoolean = function(key) {
@@ -481,6 +474,8 @@
             window.stats[key] = input.value;
             showUpdateNotice(childWindow);
             console.log('Cheat Script v4: Set', key, 'to', input.value);
+            // NEW: Reset typing flag
+            engine.isTyping = false;
         };
         
         childWindow.cheatDragSingle = function(event, key) {
@@ -581,14 +576,16 @@
             }
         }
         
-        // Show first tab
         childWindow.cheatShowTab(0);
         
-        // Set up auto-refresh interval
         if (engine.updateInterval) {
             clearInterval(engine.updateInterval);
         }
         engine.updateInterval = setInterval(function() {
+            // NEW: Check if typing before refreshing
+            if (engine.isTyping) {
+                return;
+            }
             if (engine.childWindow && !engine.childWindow.closed) {
                 refreshWindowStats(engine.childWindow);
             } else {
@@ -608,10 +605,14 @@
     function refreshWindowStats(childWindow) {
         if (!childWindow || childWindow.closed) return;
         
+        // NEW: Don't refresh if typing
+        if (engine.isTyping) {
+            return;
+        }
+        
         var statsData = compileStats();
         if (!statsData) return;
         
-        // Update stat chart values
         var charts = statsData.charts || [];
         for (var i = 0; i < charts.length; i++) {
             var stat = charts[i];
@@ -640,7 +641,6 @@
             }
         }
         
-        // Update numerical stats
         var numerical = statsData.numerical || [];
         for (var j = 0; j < numerical.length; j++) {
             var stat = numerical[j];
@@ -650,7 +650,6 @@
             }
         }
         
-        // Update boolean stats
         var boolean = statsData.boolean || [];
         for (var k = 0; k < boolean.length; k++) {
             var stat = boolean[k];
@@ -660,7 +659,6 @@
             }
         }
         
-        // Update string stats
         var string = statsData.string || [];
         for (var l = 0; l < string.length; l++) {
             var stat = string[l];
@@ -676,25 +674,24 @@
     // ============================================================
     
     function init() {
-        // Load stat charts
         loadStatCharts().then(function() {
             console.log('Cheat Script v4: Stat charts loaded');
-            // Add the cheat button
             addCheatButton();
             console.log('Cheat Script v4: Ready');
         }).catch(function(error) {
             console.error('Cheat Script v4: Initialization error:', error);
-            // Still add the button even if stat charts fail
             addCheatButton();
         });
     }
     
-    // Wait for DOM to be ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
+    
+    // Expose openCheatWindow globally
+    window.openCheatWindow = openCheatWindow;
     
     console.log('Cheat Script v4: Loaded successfully');
 })();
