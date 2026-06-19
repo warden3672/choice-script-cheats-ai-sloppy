@@ -1,0 +1,548 @@
+(function() {
+    'use strict';
+    
+    console.log('Cheat Script v3: Starting...');
+    
+    // Check if already loaded
+    if (window._cheatScriptLoaded) {
+        console.log('Cheat Script v3: Already loaded');
+        return;
+    }
+    window._cheatScriptLoaded = true;
+    
+    // Get the buttons container
+    var btns = document.getElementById("buttons");
+    if (!btns) {
+        console.error('Cheat Script v3: Buttons container not found');
+        return;
+    }
+    
+    // Remove old cheat button if exists
+    var oldButton = document.getElementById("cheatButton");
+    if (oldButton) {
+        oldButton.remove();
+    }
+    
+    // Create the cheat button
+    var cheatButton = document.createElement('button');
+    cheatButton.id = 'cheatButton';
+    cheatButton.className = 'spacedLink';
+    cheatButton.textContent = 'Modify Stats';
+    cheatButton.onclick = function() {
+        openCheatWindow();
+    };
+    btns.appendChild(cheatButton);
+    console.log('Cheat Script v3: Button added');
+    
+    // Store variables in window scope so they persist
+    window.cheatData = {
+        childWindow: null,
+        statCharts: [],
+        sceneFiles: [],
+        stringValues: {},
+        stringConditions: [],
+        modifiableStatChartsStats: [],
+        modifiableNumericalStats: [],
+        modifiableBooleanStats: [],
+        modifiableStringStats: [],
+        myInterval: null
+    };
+    
+    // Helper functions
+    function getBaseURL() {
+        var url = window.location.href;
+        return url.replace(/(index\.html$|mygame\/$)/, '');
+    }
+    
+    function getTitle(statName) {
+        var title = statName.replace(/[^a-zA-Z0-9 ]/g, " ");
+        return title.charAt(0).toUpperCase() + title.slice(1);
+    }
+    
+    // Parse stat charts from choicescript_stats.txt
+    function parseStatChart(rawStatChart) {
+        var statIndex = 0;
+        var statCharts = [];
+        
+        for (var i = 0; i < rawStatChart.length; i++) {
+            var line = rawStatChart[i];
+            var pieces = line.trim().split(' ');
+            var type = pieces[0];
+            var variable = pieces[1];
+            var label = '';
+            
+            if (type == 'text' || type == 'percent') {
+                if (pieces.length > 2) {
+                    label = line.substring(line.indexOf(pieces[2])).trim();
+                } else {
+                    label = variable;
+                }
+                statCharts.push({ statIndex: statIndex, type: type, variable: variable.toLowerCase(), label: label });
+                statIndex++;
+            } else if (type == 'opposed_pair') {
+                var nextLine = rawStatChart[i + 1];
+                var opposed_label = nextLine ? nextLine.trim() : '';
+                statCharts.push({ 
+                    statIndex: statIndex, 
+                    type: type, 
+                    variable: variable.toLowerCase(), 
+                    label: variable,
+                    opposed_label: opposed_label 
+                });
+                statIndex++;
+                i++;
+            }
+        }
+        return statCharts;
+    }
+    
+    // Load stat charts
+    function loadStatCharts() {
+        return new Promise(function(resolve) {
+            var baseURL = getBaseURL();
+            var statsURL = baseURL + "mygame/scenes/choicescript_stats.txt";
+            
+            console.log('Loading choicescript_stats.txt...');
+            
+            fetch(statsURL)
+                .then(function(response) {
+                    if (!response.ok) throw new Error("Network response was not ok");
+                    return response.text();
+                })
+                .then(function(text) {
+                    var lines = text.split(/\r?\n/);
+                    var currentLine = 0;
+                    var allStatCharts = [];
+                    
+                    while (currentLine < lines.length) {
+                        var line = lines[currentLine];
+                        if (line.trim().startsWith('*stat_chart')) {
+                            var rawStatChart = [];
+                            var firstIndent = line.search(/\S|$/);
+                            currentLine++;
+                            while (currentLine < lines.length) {
+                                line = lines[currentLine];
+                                var skippable = line.trim().length == 0 || line.trim().startsWith('*comment');
+                                if (skippable) {
+                                    currentLine++;
+                                } else {
+                                    var currentIndent = line.search(/\S|$/);
+                                    if (currentIndent > firstIndent) {
+                                        rawStatChart.push(line);
+                                        currentLine++;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                            var parsed = parseStatChart(rawStatChart);
+                            allStatCharts = allStatCharts.concat(parsed);
+                        } else {
+                            currentLine++;
+                        }
+                    }
+                    
+                    window.cheatData.statCharts = allStatCharts;
+                    console.log('Stat charts loaded:', allStatCharts.length);
+                    resolve(allStatCharts);
+                })
+                .catch(function(error) {
+                    console.error("Error loading stat charts:", error);
+                    resolve([]);
+                });
+        });
+    }
+    
+    // Compile stats
+    function compileStats() {
+        var stats = window.stats;
+        if (!stats) {
+            console.error('Stats object not found');
+            return;
+        }
+        
+        var statKeyValues = Object.entries(stats);
+        var modifiableStatChartsStats = [];
+        var modifiableNumericalStats = [];
+        var modifiableBooleanStats = [];
+        var modifiableStringStats = [];
+        
+        // Compile stat charts
+        for (var i = 0; i < window.cheatData.statCharts.length; i++) {
+            var stat = window.cheatData.statCharts[i];
+            var value = stats[stat.variable];
+            if (value !== undefined) {
+                var val = value;
+                var statType = typeof value;
+                if (statType === 'boolean') {
+                    modifiableStatChartsStats.push({
+                        index: stat.statIndex,
+                        key: stat.variable,
+                        value: val,
+                        statType: 'boolean',
+                        displayType: stat.type,
+                        label: stat.label,
+                        opposedLabel: stat.opposed_label || ''
+                    });
+                } else if (!isNaN(value) && value !== null && value !== '') {
+                    modifiableStatChartsStats.push({
+                        index: stat.statIndex,
+                        key: stat.variable,
+                        value: parseInt(value),
+                        statType: 'number',
+                        displayType: stat.type,
+                        label: stat.label,
+                        opposedLabel: stat.opposed_label || ''
+                    });
+                } else if (typeof val === 'string') {
+                    modifiableStatChartsStats.push({
+                        index: stat.statIndex,
+                        key: stat.variable,
+                        value: val,
+                        statType: 'string',
+                        displayType: stat.type,
+                        label: stat.label,
+                        opposedLabel: stat.opposed_label || ''
+                    });
+                }
+            }
+        }
+        
+        // Compile all stats
+        for (var key in stats) {
+            var value = stats[key];
+            if (typeof value === 'boolean') {
+                modifiableBooleanStats.push({ key: key, value: value, displayType: 'boolean' });
+            } else if (!isNaN(value) && value !== null && value !== '' && typeof value !== 'boolean') {
+                modifiableNumericalStats.push({ key: key, value: parseInt(value), displayType: 'number' });
+            } else if (typeof value === 'string') {
+                modifiableStringStats.push({ key: key, value: value, displayType: 'string' });
+            }
+        }
+        
+        window.cheatData.modifiableStatChartsStats = modifiableStatChartsStats;
+        window.cheatData.modifiableNumericalStats = modifiableNumericalStats;
+        window.cheatData.modifiableBooleanStats = modifiableBooleanStats;
+        window.cheatData.modifiableStringStats = modifiableStringStats;
+    }
+    
+    // Build HTML
+    function buildCheatHTML() {
+        var html = '';
+        
+        // Base styles
+        html += '<style>';
+        html += 'body {font-family: Palatino,Georgia,serif;background-color: #f7f4f1;color: rgba(0,0,0,.85);margin: 1ch auto;padding: 0;max-width: 80ch;}';
+        html += 'table {border-collapse: collapse;width: 100%;}';
+        html += 'th, td {padding: 3px;text-align: left;}';
+        html += '.statBar {background-color: #949291;height: 2.5rem;line-height: 2.5rem;margin: .5ch 0;width: 100%;color: #f7f4f1;position: relative;}';
+        html += '.statValue {background-color: #ff5955;position: absolute;top: 0;left: 0;height: 100%;z-index: -1;}';
+        html += '.opposed {background-color: #6d6dfc;}';
+        html += '.editable {display: inline-block;min-width: 50px;padding: 1px 10px;border: 1px solid #ccc;border-radius: 3px;outline: none;background-color: ghostwhite;}';
+        html += '.tabContentItem {display: none;}';
+        html += '.tabButton {appearance: none;border-width: 1px;padding: 5px 10px;cursor: pointer;}';
+        html += '.tabButton:hover {background-color: #d9d9d9;}';
+        html += '.searchInput {margin-bottom: 5px;padding: 3px;}';
+        html += '.spacedLink {margin-right: .5em;}';
+        html += '.container {padding: 10px;}';
+        html += '#tabContent {margin-top: 10px;}';
+        html += '</style>';
+        
+        html += '<div class="container">';
+        html += '<h1 style="text-align:center;">Modify Stats</h1>';
+        
+        // Tab buttons
+        html += '<div id="tabButtons" style="text-align:center;">';
+        html += '<button class="tabButton" onclick="cheatShowTab(0)">Stat Charts</button>';
+        html += '<button class="tabButton" onclick="cheatShowTab(1)">Numerical Stats</button>';
+        html += '<button class="tabButton" onclick="cheatShowTab(2)">Boolean Stats</button>';
+        html += '<button class="tabButton" onclick="cheatShowTab(3)">String Stats</button>';
+        html += '</div>';
+        
+        html += '<div id="tabContent">';
+        
+        // Stat Charts Tab
+        html += '<div class="tabContentItem" id="tab0">';
+        html += '<h2 style="text-align:center;">STAT CHARTS</h2>';
+        
+        var statCharts = window.cheatData.modifiableStatChartsStats;
+        if (statCharts.length === 0) {
+            html += '<p style="text-align:center;">No stat charts to modify.</p>';
+        } else {
+            for (var i = 0; i < statCharts.length; i++) {
+                var stat = statCharts[i];
+                var value = stat.value;
+                var key = stat.key;
+                var label = stat.label;
+                var displayType = stat.displayType;
+                
+                if (displayType === 'opposed_pair') {
+                    var opposedKey = stat.opposedKey || '';
+                    var opposedLabel = stat.opposedLabel || '';
+                    var percentValue = typeof value === 'number' ? value : 50;
+                    
+                    html += '<div class="statBar statLine opposed">';
+                    html += '<span style="float:left;padding-left:10px;">' + label + ': <span id="' + key + '">' + percentValue + '</span>%</span>';
+                    html += '<span style="float:right;padding-right:10px;">' + opposedLabel + ': <span id="' + opposedKey + '">' + (100 - percentValue) + '</span>%</span>';
+                    html += '<div class="statValue" id="statBar' + i + '" style="width: ' + percentValue + '%;" onmousedown="cheatOpposedDrag(event, \'' + key + '\', \'' + opposedKey + '\')">&nbsp;</div>';
+                    html += '</div>';
+                } else if (displayType === 'percent') {
+                    var percentValue = typeof value === 'number' ? value : 50;
+                    html += '<div class="statBar statLine">';
+                    html += '<span style="float:left;padding-left:10px;">' + label + ': <span id="' + key + '">' + percentValue + '</span>%</span>';
+                    html += '<div class="statValue" id="statBar' + i + '" style="width: ' + percentValue + '%;" onmousedown="cheatSingleDrag(event, \'' + key + '\')">&nbsp;</div>';
+                    html += '</div>';
+                } else {
+                    html += '<div style="text-align:left;padding:5px;">';
+                    html += '<span>' + label + ': </span>';
+                    html += '<span id="' + key + '" contenteditable="true" data-type="' + (stat.statType || 'text') + '" class="editable" oninput="cheatUpdateStat(\'' + key + '\')">' + value + '</span>';
+                    html += '<span id="' + key + 'Error" class="error" style="color:red;font-size:smaller;"></span>';
+                    html += '</div>';
+                }
+            }
+        }
+        html += '</div>';
+        
+        // Numerical Stats Tab
+        html += '<div class="tabContentItem" id="tab1">';
+        html += '<h2 style="text-align:center;">NUMERICAL STATS</h2>';
+        var numericalStats = window.cheatData.modifiableNumericalStats;
+        if (numericalStats.length === 0) {
+            html += '<p style="text-align:center;">No numerical stats to modify.</p>';
+        } else {
+            html += '<input type="text" id="searchNumerical" class="searchInput" oninput="cheatFilterTable(\'searchNumerical\', \'numericalTable\')" placeholder="Search...">';
+            html += '<table id="numericalTable">';
+            html += '<tr><th>Stat</th><th>Value</th></tr>';
+            for (var j = 0; j < numericalStats.length; j++) {
+                var stat = numericalStats[j];
+                html += '<tr>';
+                html += '<td>' + getTitle(stat.key) + '</td>';
+                html += '<td><span id="' + stat.key + '" contenteditable="true" data-type="number" class="editable" oninput="cheatUpdateStat(\'' + stat.key + '\')">' + stat.value + '</span>';
+                html += '<span id="' + stat.key + 'Error" class="error" style="color:red;font-size:smaller;"></span></td>';
+                html += '</tr>';
+            }
+            html += '</table>';
+        }
+        html += '</div>';
+        
+        // Boolean Stats Tab
+        html += '<div class="tabContentItem" id="tab2">';
+        html += '<h2 style="text-align:center;">BOOLEAN STATS</h2>';
+        var booleanStats = window.cheatData.modifiableBooleanStats;
+        if (booleanStats.length === 0) {
+            html += '<p style="text-align:center;">No boolean stats to modify.</p>';
+        } else {
+            html += '<input type="text" id="searchBoolean" class="searchInput" oninput="cheatFilterTable(\'searchBoolean\', \'booleanTable\')" placeholder="Search...">';
+            html += '<table id="booleanTable">';
+            html += '<tr><th>Stat</th><th>Value</th></tr>';
+            for (var k = 0; k < booleanStats.length; k++) {
+                var stat = booleanStats[k];
+                var isChecked = stat.value ? 'checked' : '';
+                html += '<tr>';
+                html += '<td>' + getTitle(stat.key) + '</td>';
+                html += '<td><input type="checkbox" id="' + stat.key + '" ' + isChecked + ' onchange="cheatModifyBoolean(\'' + stat.key + '\')"/></td>';
+                html += '</tr>';
+            }
+            html += '</table>';
+        }
+        html += '</div>';
+        
+        // String Stats Tab
+        html += '<div class="tabContentItem" id="tab3">';
+        html += '<h2 style="text-align:center;">STRING STATS</h2>';
+        var stringStats = window.cheatData.modifiableStringStats;
+        if (stringStats.length === 0) {
+            html += '<p style="text-align:center;">No string stats to modify.</p>';
+        } else {
+            html += '<input type="text" id="searchString" class="searchInput" oninput="cheatFilterTable(\'searchString\', \'stringTable\')" placeholder="Search...">';
+            html += '<table id="stringTable">';
+            html += '<tr><th>Stat</th><th>Value</th></tr>';
+            for (var l = 0; l < stringStats.length; l++) {
+                var stat = stringStats[l];
+                html += '<tr>';
+                html += '<td>' + getTitle(stat.key) + '</td>';
+                html += '<td><input type="text" id="' + stat.key + '" value="' + stat.value + '" oninput="cheatModifyString(\'' + stat.key + '\')"></td>';
+                html += '</tr>';
+            }
+            html += '</table>';
+        }
+        html += '</div>';
+        
+        html += '</div>';
+        html += '</div>';
+        
+        return html;
+    }
+    
+    // Open cheat window
+    function openCheatWindow() {
+        console.log('Opening cheat window...');
+        
+        // Compile stats first
+        compileStats();
+        
+        // Build HTML
+        var html = buildCheatHTML();
+        
+        // Open window
+        var childWindow = window.open('', 'cheatWindow', 'width=900,height=700,toolbar=0,menubar=0,location=0,status=0,scrollbars=1,resizeable=1');
+        if (!childWindow) {
+            alert('Please allow popups for this site to use the cheat tool.');
+            return;
+        }
+        
+        childWindow.document.title = 'ChoiceScript Cheat Editor';
+        
+        // Add the HTML
+        childWindow.document.body.innerHTML = html;
+        
+        // Add functions to child window
+        childWindow.cheatData = window.cheatData;
+        childWindow.stats = window.stats;
+        
+        // Define helper functions in child window
+        childWindow.cheatShowTab = function(tabIndex) {
+            var tabs = childWindow.document.querySelectorAll('.tabContentItem');
+            tabs.forEach(function(tab, index) {
+                tab.style.display = (index === tabIndex) ? 'block' : 'none';
+            });
+        };
+        
+        childWindow.cheatUpdateStat = function(key) {
+            var value = childWindow.document.getElementById(key);
+            if (!value) return;
+            
+            var inputValue = value.textContent.trim();
+            var inputType = value.getAttribute('data-type');
+            var errorValue = childWindow.document.getElementById(key + 'Error');
+            
+            if (inputType === 'number') {
+                var numValue = parseInt(inputValue);
+                if (!isNaN(numValue)) {
+                    value.textContent = Math.round(numValue).toString();
+                    if (errorValue) errorValue.style.display = 'none';
+                    window.stats[key] = numValue;
+                } else {
+                    if (errorValue) {
+                        errorValue.textContent = 'Please enter a valid number';
+                        errorValue.style.display = 'inline-block';
+                    }
+                }
+            } else {
+                window.stats[key] = inputValue;
+                if (errorValue) errorValue.style.display = 'none';
+            }
+        };
+        
+        childWindow.cheatModifyBoolean = function(key) {
+            var checkbox = childWindow.document.getElementById(key);
+            window.stats[key] = checkbox.checked;
+        };
+        
+        childWindow.cheatModifyString = function(key) {
+            var input = childWindow.document.getElementById(key);
+            window.stats[key] = input.value;
+        };
+        
+        childWindow.cheatFilterTable = function(searchId, tableId) {
+            var filterValue = childWindow.document.getElementById(searchId).value.toLowerCase();
+            var table = childWindow.document.getElementById(tableId);
+            if (!table) return;
+            
+            var rows = table.getElementsByTagName('tr');
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].getElementsByTagName('td');
+                var rowVisible = false;
+                for (var j = 0; j < cells.length; j++) {
+                    var cellValue = cells[j].textContent || cells[j].innerText;
+                    if (cellValue.toLowerCase().indexOf(filterValue) > -1) {
+                        rowVisible = true;
+                        break;
+                    }
+                }
+                rows[i].style.display = rowVisible ? '' : 'none';
+            }
+        };
+        
+        childWindow.cheatSingleDrag = function(event, key) {
+            var statBar = event.target;
+            var dragStartX = 0;
+            var dragStartValue = parseInt(statBar.style.width);
+            var value = childWindow.document.getElementById(key);
+            
+            function startDrag(e) {
+                dragStartX = e.clientX;
+                dragStartValue = parseInt(statBar.style.width);
+                childWindow.document.addEventListener('mousemove', doDrag);
+                childWindow.document.addEventListener('mouseup', stopDrag);
+            }
+            
+            function doDrag(e) {
+                var dragDistance = e.clientX - dragStartX;
+                var newValue = dragStartValue + (dragDistance / statBar.parentNode.clientWidth) * 100;
+                newValue = Math.min(100, Math.max(1, newValue));
+                statBar.style.width = newValue + '%';
+                value.textContent = newValue.toFixed(0);
+            }
+            
+            function stopDrag(e) {
+                var newValue = parseInt(value.textContent);
+                window.stats[key] = newValue;
+                childWindow.document.removeEventListener('mousemove', doDrag);
+                childWindow.document.removeEventListener('mouseup', stopDrag);
+            }
+            
+            startDrag(event);
+        };
+        
+        childWindow.cheatOpposedDrag = function(event, key, opposedKey) {
+            var statBar = event.target;
+            var dragStartX = 0;
+            var dragStartValue = parseInt(statBar.style.width);
+            var value = childWindow.document.getElementById(key);
+            var opposedValue = childWindow.document.getElementById(opposedKey);
+            
+            function startDrag(e) {
+                dragStartX = e.clientX;
+                dragStartValue = parseInt(statBar.style.width);
+                childWindow.document.addEventListener('mousemove', doDrag);
+                childWindow.document.addEventListener('mouseup', stopDrag);
+            }
+            
+            function doDrag(e) {
+                var dragDistance = e.clientX - dragStartX;
+                var newValue = dragStartValue + (dragDistance / statBar.parentNode.clientWidth) * 100;
+                newValue = Math.min(100, Math.max(1, newValue));
+                statBar.style.width = newValue + '%';
+                value.textContent = newValue.toFixed(0);
+                opposedValue.textContent = (100 - newValue).toFixed(0);
+            }
+            
+            function stopDrag(e) {
+                var newValue = parseInt(value.textContent);
+                window.stats[key] = newValue;
+                childWindow.document.removeEventListener('mousemove', doDrag);
+                childWindow.document.removeEventListener('mouseup', stopDrag);
+            }
+            
+            startDrag(event);
+        };
+        
+        // Show first tab by default
+        childWindow.cheatShowTab(0);
+        
+        console.log('Cheat window opened!');
+    }
+    
+    // Load stat charts and add the button
+    loadStatCharts().then(function() {
+        console.log('Cheat Script v3: Ready');
+    });
+    
+    // Expose functions globally
+    window.openCheatWindow = openCheatWindow;
+    window.loadStatCharts = loadStatCharts;
+    window.compileStats = compileStats;
+    
+    console.log('Cheat Script v3: Loaded successfully');
+})();
